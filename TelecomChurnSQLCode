@@ -1,0 +1,90 @@
+SELECT * FROM `titanium-goods-384119.TelecomChurnDataset.TelecomChurnTable`;
+
+--Showing the number of Months to cancel
+--Showing those who still has a contract
+--Showing those has cancelled their contract
+--Show the number of current customers
+
+SELECT 
+DATE_TRUNC(ContractedDate,month) ContractedMonth,
+DATE_DIFF(DATE_TRUNC(CancelledDate,month),DATE_TRUNC(ContractedDate,month),MONTH) MonthstoCancel,
+CASE
+WHEN CancelledDate IS NULL THEN 1
+ELSE 0 END contracted,
+CASE
+WHEN CancelledDate IS NOT NULL THEN 1
+ELSE 0 END cancelled,
+COUNT(1) Customers
+FROM `titanium-goods-384119.TelecomChurnDataset.TelecomChurnTable`
+GROUP BY 1, 2, 3, 4
+ORDER BY 1, 2;
+
+
+WITH NewTelecomChurnTable AS(
+SELECT
+  DATE_TRUNC(ContractedDate,month) ContractedMonth,
+  DATE_DIFF(DATE_TRUNC(CancelledDate,month),DATE_TRUNC(ContractedDate,month),MONTH) MonthstoCancel,
+  CASE
+    WHEN CancelledDate IS NULL THEN 1
+  ELSE 0 END contracted,
+  CASE
+    WHEN CancelledDate IS NOT NULL THEN 1
+  ELSE 0 END cancelled,
+  COUNT(1) Customers
+FROM `titanium-goods-384119.TelecomChurnDataset.TelecomChurnTable`
+GROUP BY 1, 2, 3, 4
+)
+  SELECT
+    ContractedMonth,
+    MonthstoCancel,
+    contracted,
+    cancelled,
+    SUM(CASE WHEN cancelled = 1 THEN Customers ELSE 0 END) OVER (PARTITION BY ContractedMonth 
+    ORDER BY MonthstoCancel) CustomersCancelling,
+    Sum(Customers) OVER (PARTITION BY ContractedMonth) CustomersAtMonth
+  FROM NewTelecomChurnTable;
+
+
+--Calculating the Churn and retention rate for a specific month
+WITH NewTelecomChurnTable AS(
+  SELECT
+  DATE_TRUNC(ContractedDate,month) ContractedMonth,
+  DATE_DIFF(DATE_TRUNC(CancelledDate,month),DATE_TRUNC(ContractedDate,month),MONTH) MonthstoCancel,
+  CASE
+    WHEN CancelledDate IS NULL THEN 1
+  ELSE 0 END contracted,
+  CASE
+    WHEN CancelledDate IS NOT NULL THEN 1
+  ELSE 0 END cancelled,
+  COUNT(1) Customers
+FROM `titanium-goods-384119.TelecomChurnDataset.TelecomChurnTable`
+GROUP BY 1, 2, 3, 4
+), FinalTelecomChurnTable AS(
+  SELECT
+    ContractedMonth,
+    MonthstoCancel,
+    contracted,
+    cancelled,
+    SUM(CASE WHEN cancelled = 1 THEN Customers ELSE 0 END) OVER (PARTITION BY ContractedMonth 
+    ORDER BY MonthstoCancel) CustomersCancelling,
+    Sum(Customers) OVER (PARTITION BY ContractedMonth) CustomersAtMonth
+  FROM NewTelecomChurnTable
+)
+SELECT
+  ContractedMonth,
+  MonthstoCancel,
+  contracted,
+  cancelled,
+  CustomersCancelling,
+  CustomersAtMonth,
+  CASE
+    WHEN CustomersAtMonth = 0 THEN 0
+    ELSE CustomersCancelling/CustomersAtMonth
+  END ChurnRate,
+  CASE
+    WHEN CustomersAtMonth = 0 THEN 0
+    ELSE 1-(CustomersCancelling/CustomersAtMonth)
+  END RetentionRate
+FROM FinalTelecomChurnTable
+WHERE MonthstoCancel >= 0;
+
